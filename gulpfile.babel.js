@@ -7,13 +7,9 @@ import gulp from 'gulp';
 // and attach them to the `plugins` object
 import plugins from 'gulp-load-plugins';
 
-// Temporary solution until gulp 4
-// https://github.com/gulpjs/gulp/issues/355
-import runSequence from 'run-sequence';
-
 import archiver from 'archiver';
 import glob from 'glob';
-import del from 'del';
+import rimraf from 'rimraf';
 import ssri from 'ssri';
 import modernizr from 'modernizr';
 
@@ -27,12 +23,12 @@ const dirs = pkg['h5bp-configs'].directories;
 // | Helper tasks                                                      |
 // ---------------------------------------------------------------------
 
-gulp.task('archive:create_archive_dir', () => {
-  fs.mkdirSync(path.resolve(dirs.archive), '0755');
-});
 
-gulp.task('archive:zip', (done) => {
+const archiveMakeDir = (done) => {
+  fs.mkdir(path.resolve(dirs.archive), '0755', done);
+};
 
+const archiveZip = (done) => {
   const archiveName = path.resolve(dirs.archive, `${pkg.name}_v${pkg.version}.zip`);
   const zip = archiver('zip');
   const files = glob.sync('**/*.*', {
@@ -63,35 +59,19 @@ gulp.task('archive:zip', (done) => {
 
   zip.pipe(output);
   zip.finalize();
+};
 
-});
-
-gulp.task('clean', (done) => {
-  del([
-    dirs.archive,
-    dirs.dist
-  ]).then(() => {
-    done();
-  });
-});
-
-gulp.task('copy', [
-  'copy:.htaccess',
-  'copy:index.html',
-  'copy:jquery',
-  'copy:license',
-  'copy:main.css',
-  'copy:misc',
-  'copy:normalize'
-]);
-
-gulp.task('copy:.htaccess', () =>
-  gulp.src('node_modules/apache-server-configs/dist/.htaccess')
-    .pipe(plugins().replace(/# ErrorDocument/g, 'ErrorDocument'))
-    .pipe(gulp.dest(dirs.dist))
+const clean = gulp.parallel(
+  (done) => { rimraf(dirs.archive, done); },
+  (done) => { rimraf(dirs.dist, done); }
 );
 
-gulp.task('copy:index.html', () => {
+const copyHtAccess = () =>
+  gulp.src('node_modules/apache-server-configs/dist/.htaccess')
+    .pipe(plugins().replace(/# ErrorDocument/g, 'ErrorDocument'))
+    .pipe(gulp.dest(dirs.dist));
+
+const copyIndex = () => {
   const hash = ssri.fromData(
     fs.readFileSync('node_modules/jquery/dist/jquery.min.js'),
     {algorithms: ['sha256']}
@@ -99,27 +79,24 @@ gulp.task('copy:index.html', () => {
   let version = pkg.devDependencies.jquery;
   let modernizrVersion = pkg.devDependencies.modernizr;
 
-  gulp.src(`${dirs.src}/index.html`)
+  return gulp.src(`${dirs.src}/index.html`)
     .pipe(plugins().replace(/{{JQUERY_VERSION}}/g, version))
     .pipe(plugins().replace(/{{MODERNIZR_VERSION}}/g, modernizrVersion))
     .pipe(plugins().replace(/{{JQUERY_SRI_HASH}}/g, hash.toString()))
     .pipe(gulp.dest(dirs.dist));
-});
+};
 
-gulp.task('copy:jquery', () =>
-  gulp.src(['node_modules/jquery/dist/jquery.min.js'])
-    .pipe(plugins().rename(`jquery-${pkg.devDependencies.jquery}.min.js`))
-    .pipe(gulp.dest(`${dirs.dist}/js/vendor`))
-);
+const copyJQuery = () =>
+  gulp.src('node_modules/jquery/dist/jquery.min.js')
+    .pipe(plugins().rename( `jquery-${pkg.devDependencies.jquery}.min.js`))
+    .pipe(gulp.dest( `${dirs.dist}/js/vendor`));
 
-gulp.task('copy:license', () =>
+const copyLicense = () =>
   gulp.src('LICENSE.txt')
-    .pipe(gulp.dest(dirs.dist))
-);
+    .pipe(gulp.dest( dirs.dist));
 
-gulp.task('copy:main.css', () => {
-  const banner = `/*! HTML5 Boilerplate v${pkg.version} | ${pkg.license} License | ${pkg.homepage} */\n\n`;
-
+const banner = `/*! HTML5 Boilerplate v${pkg.version} | ${pkg.license} License | ${pkg.homepage} */\n\n`;
+const copyMainCss = () =>
   gulp.src(`node_modules/main.css/dist/main.css`)
     .pipe(plugins().header(banner))
     .pipe(plugins().autoprefixer({
@@ -127,9 +104,8 @@ gulp.task('copy:main.css', () => {
       cascade: false
     }))
     .pipe(gulp.dest(`${dirs.dist}/css`));
-});
 
-gulp.task('copy:misc', () =>
+const copyMisc = () =>
   gulp.src([
 
     // Copy all files
@@ -145,31 +121,36 @@ gulp.task('copy:misc', () =>
     // Include hidden files by default
     dot: true
 
-  }).pipe(gulp.dest(dirs.dist))
-);
+  }).pipe(gulp.dest(dirs.dist));
 
-gulp.task('copy:normalize', () =>
+const copyNormalize = () =>
   gulp.src('node_modules/normalize.css/normalize.css')
-    .pipe(gulp.dest(`${dirs.dist}/css`))
+    .pipe(gulp.dest(`${dirs.dist}/css`));
+
+const copy = gulp.parallel(
+  copyHtAccess,
+  copyIndex,
+  copyJQuery,
+  copyLicense,
+  copyMainCss,
+  copyMisc,
+  copyNormalize
 );
 
-gulp.task('modernizr', (done) =>{
-
+const buildModernizr = (done) => {
   modernizr.build(modernizrConfig, (code) => {
     fs.writeFile(`${dirs.dist}/js/vendor/modernizr-${pkg.devDependencies.modernizr}.min.js`, code, done);
   });
+};
 
-});
-
-gulp.task('lint:js', () =>
+const lintJs = () =>
   gulp.src([
     'gulpfile.js',
     `${dirs.src}/js/*.js`,
     `${dirs.test}/*.js`
   ]).pipe(plugins().jscs())
     .pipe(plugins().eslint())
-    .pipe(plugins().eslint.failOnError())
-);
+    .pipe(plugins().eslint.failOnError());
 
 
 // ---------------------------------------------------------------------
