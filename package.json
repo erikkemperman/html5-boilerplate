@@ -50,6 +50,7 @@
   "scripts": {
     "clean": "gulp clean",
     "build": "gulp build",
+    "watch": "gulp watch",
     "test": "gulp archive && mocha --require babel-core/register --reporter spec --timeout 5000"
   },
   "version": "6.1.0",

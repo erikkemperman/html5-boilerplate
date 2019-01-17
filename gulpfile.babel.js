@@ -1,7 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import process from 'process';
+import child_process from 'child_process';
 
 import gulp from 'gulp';
+import gulplog from 'gulplog';
 
 // Load all gulp plugins automatically
 // and attach them to the `plugins` object
@@ -13,6 +16,7 @@ import del from 'del';
 import ssri from 'ssri';
 import modernizr from 'modernizr';
 
+
 import pkg from './package.json';
 import modernizrConfig from './modernizr-config.json';
 
@@ -21,13 +25,18 @@ const dirs = pkg['h5bp-configs'].directories;
 const plugins = loadPlugins();
 
 
-// Wrapper because we prefer colons over camels in task names
+// task wrapper because we prefer colons over camels in task names
 const task = (name, fun) => {
   fun.displayName = name;
   return fun;
 };
 
+// src wrapper to cache file contents and avoid re-computing hashes
+//
 
+// const src = (globs, opts) => {
+//   glob.hasMagic();
+// };
 // ---------------------------------------------------------------------
 // | Helper tasks                                                      |
 // ---------------------------------------------------------------------
@@ -190,5 +199,24 @@ const archive = task('archive',
   )
 );
 
-export { archive, build, clean };
+process.on('exit', () => {
+  gulplog.info('≡=- EXIT ' + process.pid + '-=≡');
+});
+
+const watch = task('watch', () =>
+  new Promise((resolve) => {//
+    const cmd = process.argv[0];
+    const args = process.argv.slice(1);
+    gulp.watch(`${dirs.src}/**/*`, build);
+    gulp.watch('gulpfile.babel.js', task('respawn', (done) => {
+      gulplog.info('≡=- Gulpfile changed, re-spawning Gulp -=≡');
+      child_process.spawn(cmd, args, {stdio: 'inherit'});
+      done();
+      resolve();
+      process.exit(0);
+    }));
+  })
+);
+
+export { archive, build, clean, watch };
 export default build;
