@@ -10,8 +10,9 @@
     "eslint-config-recommended": "^3.0.0",
     "eslint-plugin-mocha": "^5.2.0",
     "glob": "^7.1.3",
-    "gulp": "^3.9.1",
+    "gulp": "^4.0.0",
     "gulp-autoprefixer": "^6.0.0",
+    "gulp-cli": "^2.0.1",
     "gulp-eslint": "^5.0.0",
     "gulp-header": "^2.0.5",
     "gulp-jscs": "^4.1.0",
@@ -23,7 +24,6 @@
     "mocha": "^5.2.0",
     "modernizr": "3.6.0",
     "normalize.css": "8.0.1",
-    "run-sequence": "^2.2.1",
     "ssri": "^6.0.1",
     "strip-json-comments": "^2.0.1"
   },
@@ -48,6 +48,7 @@
   "license": "MIT",
   "name": "html5-boilerplate",
   "scripts": {
+    "clean": "gulp clean",
     "build": "gulp build",
     "test": "gulp archive && mocha --require babel-core/register --reporter spec --timeout 5000"
   },

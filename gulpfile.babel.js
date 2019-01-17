@@ -5,11 +5,7 @@ import gulp from 'gulp';
 
 // Load all gulp plugins automatically
 // and attach them to the `plugins` object
-import plugins from 'gulp-load-plugins';
-
-// Temporary solution until gulp 4
-// https://github.com/gulpjs/gulp/issues/355
-import runSequence from 'run-sequence';
+import loadPlugins from 'gulp-load-plugins';
 
 import archiver from 'archiver';
 import glob from 'glob';
@@ -22,17 +18,26 @@ import modernizrConfig from './modernizr-config.json';
 
 
 const dirs = pkg['h5bp-configs'].directories;
+const plugins = loadPlugins();
+
+
+// Wrapper because we prefer colons over camels in task names
+const task = (name, fun) => {
+  fun.displayName = name;
+  return fun;
+};
+
 
 // ---------------------------------------------------------------------
 // | Helper tasks                                                      |
 // ---------------------------------------------------------------------
 
-gulp.task('archive:create_archive_dir', () => {
-  fs.mkdirSync(path.resolve(dirs.archive), '0755');
+
+const archiveCreateDir = task('archive:create_archive_dir', (done) => {
+  fs.mkdir(path.resolve(dirs.archive), '0755', done);
 });
 
-gulp.task('archive:zip', (done) => {
-
+const archiveZip = task('archive:zip', (done) => {
   const archiveName = path.resolve(dirs.archive, `${pkg.name}_v${pkg.version}.zip`);
   const zip = archiver('zip');
   const files = glob.sync('**/*.*', {
@@ -41,11 +46,7 @@ gulp.task('archive:zip', (done) => {
   });
   const output = fs.createWriteStream(archiveName);
 
-  zip.on('error', (error) => {
-    done();
-    throw error;
-  });
-
+  zip.on('error', done);
   output.on('close', done);
 
   files.forEach((file) => {
@@ -63,35 +64,22 @@ gulp.task('archive:zip', (done) => {
 
   zip.pipe(output);
   zip.finalize();
-
 });
 
-gulp.task('clean', (done) => {
+const clean = task('clean', () =>
   del([
     dirs.archive,
     dirs.dist
-  ]).then(() => {
-    done();
-  });
-});
+  ])
+);
 
-gulp.task('copy', [
-  'copy:.htaccess',
-  'copy:index.html',
-  'copy:jquery',
-  'copy:license',
-  'copy:main.css',
-  'copy:misc',
-  'copy:normalize'
-]);
-
-gulp.task('copy:.htaccess', () =>
+const copyHtAccess = task('copy:.htaccess', () =>
   gulp.src('node_modules/apache-server-configs/dist/.htaccess')
-    .pipe(plugins().replace(/# ErrorDocument/g, 'ErrorDocument'))
+    .pipe(plugins.replace(/# ErrorDocument/g, 'ErrorDocument'))
     .pipe(gulp.dest(dirs.dist))
 );
 
-gulp.task('copy:index.html', () => {
+const copyIndexHtml = task('copy:index.html', () => {
   const hash = ssri.fromData(
     fs.readFileSync('node_modules/jquery/dist/jquery.min.js'),
     {algorithms: ['sha256']}
@@ -99,37 +87,36 @@ gulp.task('copy:index.html', () => {
   let version = pkg.devDependencies.jquery;
   let modernizrVersion = pkg.devDependencies.modernizr;
 
-  gulp.src(`${dirs.src}/index.html`)
-    .pipe(plugins().replace(/{{JQUERY_VERSION}}/g, version))
-    .pipe(plugins().replace(/{{MODERNIZR_VERSION}}/g, modernizrVersion))
-    .pipe(plugins().replace(/{{JQUERY_SRI_HASH}}/g, hash.toString()))
+  return gulp.src(`${dirs.src}/index.html`)
+    .pipe(plugins.replace(/{{JQUERY_VERSION}}/g, version))
+    .pipe(plugins.replace(/{{MODERNIZR_VERSION}}/g, modernizrVersion))
+    .pipe(plugins.replace(/{{JQUERY_SRI_HASH}}/g, hash.toString()))
     .pipe(gulp.dest(dirs.dist));
 });
 
-gulp.task('copy:jquery', () =>
-  gulp.src(['node_modules/jquery/dist/jquery.min.js'])
-    .pipe(plugins().rename(`jquery-${pkg.devDependencies.jquery}.min.js`))
-    .pipe(gulp.dest(`${dirs.dist}/js/vendor`))
+const copyJQuery = task('copy:jquery', () =>
+  gulp.src('node_modules/jquery/dist/jquery.min.js')
+    .pipe(plugins.rename( `jquery-${pkg.devDependencies.jquery}.min.js`))
+    .pipe(gulp.dest( `${dirs.dist}/js/vendor`))
 );
 
-gulp.task('copy:license', () =>
+const copyLicense = task('copy:license', () =>
   gulp.src('LICENSE.txt')
-    .pipe(gulp.dest(dirs.dist))
+    .pipe(gulp.dest( dirs.dist))
 );
 
-gulp.task('copy:main.css', () => {
-  const banner = `/*! HTML5 Boilerplate v${pkg.version} | ${pkg.license} License | ${pkg.homepage} */\n\n`;
-
-  gulp.src(`node_modules/main.css/dist/main.css`)
-    .pipe(plugins().header(banner))
-    .pipe(plugins().autoprefixer({
+const banner = `/*! HTML5 Boilerplate v${pkg.version} | ${pkg.license} License | ${pkg.homepage} */\n\n`;
+const copyMainCss = task('copy:main.css', () =>
+  gulp.src('node_modules/main.css/dist/main.css')
+    .pipe(plugins.header(banner))
+    .pipe(plugins.autoprefixer({
       browsers: ['last 2 versions', 'ie >= 9', '> 1%'],
       cascade: false
     }))
-    .pipe(gulp.dest(`${dirs.dist}/css`));
-});
+    .pipe(gulp.dest(`${dirs.dist}/css`))
+);
 
-gulp.task('copy:misc', () =>
+const copyMisc = task('copy:misc', () =>
   gulp.src([
 
     // Copy all files
@@ -148,27 +135,37 @@ gulp.task('copy:misc', () =>
   }).pipe(gulp.dest(dirs.dist))
 );
 
-gulp.task('copy:normalize', () =>
+const copyNormalize = task('copy:normalize', () =>
   gulp.src('node_modules/normalize.css/normalize.css')
     .pipe(gulp.dest(`${dirs.dist}/css`))
 );
 
-gulp.task('modernizr', (done) =>{
+const copy = task('copy',
+  gulp.parallel(
+    copyHtAccess,
+    copyIndexHtml,
+    copyJQuery,
+    copyLicense,
+    copyMainCss,
+    copyMisc,
+    copyNormalize
+  )
+);
 
+const buildModernizr = task('modernizr', (done) => {
   modernizr.build(modernizrConfig, (code) => {
     fs.writeFile(`${dirs.dist}/js/vendor/modernizr-${pkg.devDependencies.modernizr}.min.js`, code, done);
   });
-
 });
 
-gulp.task('lint:js', () =>
+const lintJs = task('lint:js', () =>
   gulp.src([
-    'gulpfile.js',
+    'gulpfile.babel.js',
     `${dirs.src}/js/*.js`,
     `${dirs.test}/*.js`
-  ]).pipe(plugins().jscs())
-    .pipe(plugins().eslint())
-    .pipe(plugins().eslint.failOnError())
+  ]).pipe(plugins.jscs())
+    .pipe(plugins.eslint())
+    .pipe(plugins.eslint.failOnError())
 );
 
 
@@ -176,19 +173,22 @@ gulp.task('lint:js', () =>
 // | Main tasks                                                        |
 // ---------------------------------------------------------------------
 
-gulp.task('archive', (done) => {
-  runSequence(
-    'build',
-    'archive:create_archive_dir',
-    'archive:zip',
-    done);
-});
+const build = task('build',
+  gulp.series(
+    clean,
+    lintJs,
+    copy,
+    buildModernizr
+  )
+);
 
-gulp.task('build', (done) => {
-  runSequence(
-    ['clean', 'lint:js'],
-    'copy', 'modernizr',
-    done);
-});
+const archive = task('archive',
+  gulp.series(
+    build,
+    archiveCreateDir,
+    archiveZip
+  )
+);
 
-gulp.task('default', ['build']);
+export { archive, build, clean };
+export default build;
